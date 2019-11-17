@@ -53,6 +53,7 @@ module MailCatcher::Mail extend self
       cid = part.cid if part.respond_to? :cid
       add_message_part(message_id, cid, part.mime_type || "text/plain", part.attachment? ? 1 : 0, part.filename, part.charset, body, body.length)
     end
+    delete_older_messages!
 
     EventMachine.next_tick do
       message = MailCatcher::Mail.message message_id
@@ -164,5 +165,14 @@ module MailCatcher::Mail extend self
     @delete_message_parts_query ||= db.prepare "DELETE FROM message_part WHERE message_id = ?"
     @delete_messages_query.execute(message_id) and
     @delete_message_parts_query.execute(message_id)
+  end
+
+  def delete_older_messages!(max_mail_to_keep = MailCatcher::options[:max_mail_to_keep])
+    return if max_mail_to_keep <= 0
+    @delete_older_messages_query ||= db.prepare "DELETE FROM message WHERE id NOT IN (SELECT id FROM message ORDER BY created_at DESC LIMIT ?)"
+    @delete_older_message_parts_query ||= db.prepare "DELETE FROM message_part WHERE message_id NOT IN (SELECT id FROM message ORDER BY created_at DESC LIMIT ?)"
+
+    @delete_older_message_parts_query.execute(max_mail_to_keep) and
+    @delete_older_messages_query.execute(max_mail_to_keep)
   end
 end
